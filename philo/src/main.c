@@ -58,9 +58,12 @@ void	philo_append(t_table *list, int id)
 	new_philo = ft_calloc(1, sizeof(t_philo));
 	if (!new_philo)
 		ft_error(MALLOC, NULL);
-	new_philo->id = id;
+	new_philo->id = id + 1;
 	new_philo->next = new_philo;
 	new_philo->prev = new_philo;
+	new_philo->fork = malloc(sizeof(pthread_mutex_t));
+	if (!new_philo->fork)
+		ft_error(MALLOC, NULL);
 	if (list->head == NULL)
 		list->head = new_philo;
 	else
@@ -84,6 +87,7 @@ void	free_table(t_table *table)
 		next = current->next;
 		if (next == table->head)
 			next = NULL;
+		free(current->fork);
 		free(current);
 		current = NULL;
 		current = next;
@@ -108,36 +112,86 @@ struct timeval dif_time(struct timeval	ini, struct timeval	fin)
 	time.tv_usec = microseconds;
 	return (time);
 }
+void	*voiffun(void* args)
+{
+	t_args_thread *args_thread;
+
+	args_thread = (t_args_thread*) args;
+	while (1)
+	{
+		printf("%d is eating.\n", args_thread->id);
+		if (args_thread->id % 2 == 0)
+		{
+			pthread_mutex_lock(args_thread->philo->fork);
+			printf("%d has taken a fork.\n", args_thread->id);
+			pthread_mutex_lock(args_thread->next->fork);
+			printf("%d has taken a fork.\n", args_thread->id);
+		} 
+		else
+		{
+			pthread_mutex_lock(args_thread->next->fork);
+			pthread_mutex_lock(args_thread->philo->fork);
+		}
+		printf("%d is eating.\n", args_thread->id);
+		sleep(args_thread->ini_vals->time_eat);
+		pthread_mutex_unlock(args_thread->philo->fork);
+		pthread_mutex_unlock(args_thread->next->fork);
+		printf("%d is sleeping.\n", args_thread->id);
+		sleep(args_thread->ini_vals->time_sleep);
+    }
+    return (NULL);
+}
 
 int	main(int argn, char **argv)
 {
 	t_ini_vals		*philo_vals;
 	t_table			*table;
-	// pthread_t		t1;
+	pthread_t		*philo_thread;
 	int				i;
 	struct timeval	tv;
 	struct timeval	final;
+	t_args_thread   *args_thread;
+	t_philo	*current;
+	t_philo	*next;
 
 	arg_checker(argn, argv);
 	philo_vals = philo_values(argn, argv);
-	print_philo_info(philo_vals);
-	// if (pthread_create(&t1, NULL, &voiffun, NULL))
-	// 	ft_error(PTHREAD, NULL);
+	philo_thread = ft_calloc(philo_vals->num_philo, sizeof(pthread_t));
+	if (!philo_thread)
+		ft_error(MALLOC, NULL);
 	table = create_table();
 	i = -1;
 	while (++i < philo_vals->num_philo)
 		philo_append(table, i);
+
 	i = -1;
-	while (++i < 8)
+	current = table->head;
+	while (++i < philo_vals->num_philo)
 	{
-		printf("El id es: %i\n", table->head->id);
-		table->head = table->head->next;
+		pthread_mutex_init(current->fork, NULL);
+		args_thread = ft_calloc(1, sizeof(args_thread));
+		if (!args_thread)
+			ft_error(MALLOC, NULL);
+		next = current->next;
+		args_thread->ini_vals = philo_vals;
+		args_thread->id = i + 1;
+		args_thread->philo = current;
+		args_thread->next = next;
+		if (pthread_create(&philo_thread[i], NULL, &voiffun, args_thread) != 0)
+			ft_error(PTHREAD, NULL);
+		current = next;
+		free(args_thread);
+	}	
+	i = -1;
+	while (++i < philo_vals->num_philo)
+	{
+		pthread_join(philo_thread[i], NULL);
+		pthread_mutex_destroy(current->fork);
 	}
 	usleep(3000000);
 	gettimeofday(&tv, NULL);
-	// Calcula la diferencia en segundos y microsegundos
 	final = dif_time(philo_vals->ini_time, tv);
-    printf("Han pasado: %ld segundos y %ld microsegundos\n", final.tv_sec, final.tv_usec);
+	printf("Han pasado: %ld segundos y %ld microsegundos\n", final.tv_sec, final.tv_usec);
 	free(philo_vals);
 	free_table(table);
 }

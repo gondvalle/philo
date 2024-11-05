@@ -58,6 +58,14 @@ typedef struct s_ini_vals
 	struct timeval	ini_time;
 }				t_ini_vals;
 
+typedef struct s_args_thread
+{
+	int					id;
+	struct s_philo		*philo;
+	struct s_philo		*next;
+	struct s_ini_vals	*ini_vals;
+}				t_args_thread;
+
 char	**ft_free(char **mat);
 void	ft_error(char *str, char *file);
 void	null_check(int argn, char **argv);
